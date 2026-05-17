@@ -37,7 +37,7 @@ type tokenResponse struct {
 	Error       string `json:"error"`
 }
 
-func (c *HTTPClient) GetToken(ctx context.Context, username, password string) (string, error) {
+func (c *HTTPClient) GetToken(ctx context.Context, username, password string) (token string, err error) {
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, c.realm)
 
 	body := url.Values{}
@@ -60,7 +60,13 @@ func (c *HTTPClient) GetToken(ctx context.Context, username, password string) (s
 	if err != nil {
 		return "", fmt.Errorf("keycloak request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			if err == nil {
+				err = fmt.Errorf("close keycloak response body: %w", closeErr)
+			}
+		}
+	}()
 
 	var tr tokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {

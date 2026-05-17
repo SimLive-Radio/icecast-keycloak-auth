@@ -28,7 +28,9 @@ func TestHTTPClient_GetToken_Success(t *testing.T) {
 			t.Error("password was empty")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"access_token": "tok.payload.sig"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"access_token": "tok.payload.sig"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -51,7 +53,9 @@ func TestHTTPClient_GetToken_WithClientSecret(t *testing.T) {
 			t.Errorf("client_secret = %q", r.FormValue("client_secret"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"access_token": "tok.payload.sig"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"access_token": "tok.payload.sig"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -66,10 +70,12 @@ func TestHTTPClient_GetToken_WrongPassword(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{
+		if err := json.NewEncoder(w).Encode(map[string]string{
 			"error":             "invalid_grant",
 			"error_description": "Invalid user credentials",
-		})
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -110,7 +116,9 @@ func TestHTTPClient_GetToken_Timeout(t *testing.T) {
 func TestHTTPClient_GetToken_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json"))
+		if _, err := w.Write([]byte("not json")); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -159,7 +167,9 @@ func TestHTTPClient_GetToken_URLContainsRealm(t *testing.T) {
 	defer srv.Close()
 
 	c := keycloak.NewHTTPClient(srv.URL, "myrealm", "client", "")
-	c.GetToken(context.Background(), "alice", "secret")
+	if _, err := c.GetToken(context.Background(), "alice", "secret"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	want := "/realms/myrealm/protocol/openid-connect/token"
 	if gotPath != want {
