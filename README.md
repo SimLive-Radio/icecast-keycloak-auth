@@ -13,18 +13,29 @@ Users and roles live entirely in Keycloak. This service stores nothing.
 
 ## Table of Contents
 
-- [How It Works](#how-it-works)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running](#running)
-- [API](#api)
-- [Metrics](#metrics)
-- [Logs](#logs)
-- [Project Structure](#project-structure)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+- [icecast-keycloak-auth](#icecast-keycloak-auth)
+  - [Table of Contents](#table-of-contents)
+  - [How It Works](#how-it-works)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+    - [Build from source](#build-from-source)
+    - [Docker](#docker)
+  - [Configuration](#configuration)
+    - [Minimal example](#minimal-example)
+    - [Keycloak setup](#keycloak-setup)
+  - [Running](#running)
+    - [Health check](#health-check)
+  - [API](#api)
+    - [POST /auth](#post-auth)
+  - [Metrics](#metrics)
+  - [Logs](#logs)
+  - [Development](#development)
+    - [Run all tests](#run-all-tests)
+    - [Run tests with verbose output](#run-tests-with-verbose-output)
+    - [Run a specific package](#run-a-specific-package)
+    - [Build](#build)
+    - [Lint](#lint)
+  - [Contributing](#contributing)
 
 ---
 
@@ -109,7 +120,7 @@ All configuration is done via environment variables. The service refuses to star
 | `LISTEN_ADDR` | No | `:8080` | Address and port the HTTP server binds to |
 | `KEYCLOAK_CLIENT_SECRET` | No | — | Leave empty for public clients |
 | `LOG_LEVEL` | No | `info` | One of `debug`, `info`, `warn`, `error` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | `http://localhost:4317` | OTLP collector endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | — | OTLP collector endpoint. If not set OTEL is disabled |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | No | `grpc` | `grpc` or `http/protobuf` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | No | — | Comma-separated `Key=Value` pairs sent with every export request |
 | `OTEL_METRIC_EXPORT_INTERVAL` | No | `15s` | How often metrics are pushed (e.g. `30s`, `1m`) |
@@ -136,24 +147,6 @@ export REQUIRED_CLIENT_ROLE=streamer
 2. Under **Settings → Capability config**, enable **Direct access grants**.
 3. Create a client role (e.g. `streamer`).
 4. Assign the role to every user who should be allowed to stream.
-
-### Icecast setup
-
-Add a URL auth block to your `icecast.xml`:
-
-```xml
-<authentication>
-  <source-password>anything</source-password>  <!-- still required by Icecast -->
-  <url>
-    <mount>/live</mount>
-    <username>source</username>
-    <password>anything</password>
-    <auth-url>http://localhost:8080/auth</auth-url>
-  </url>
-</authentication>
-```
-
-Icecast will POST to `/auth` for every source connection attempt.
 
 ---
 
@@ -238,37 +231,6 @@ Logs are emitted as JSON on stdout, suitable for ingestion by Loki or any JSON-a
 
 The `service` and `env` fields are static Loki labels configured via `LOKI_SERVICE_LABEL` and `LOKI_ENV_LABEL`. Passwords and tokens are never written to logs.
 
----
-
-## Project Structure
-
-```
-icecast-keycloak-auth/
-├── cmd/
-│   └── server/
-│       └── main.go              # Entry point; wires dependencies, starts HTTP server
-├── internal/
-│   ├── config/
-│   │   ├── config.go            # Env-var loading with fast-fail multi-error validation
-│   │   └── config_test.go
-│   ├── handler/
-│   │   ├── auth.go              # POST /auth and GET /health handlers
-│   │   └── auth_test.go
-│   ├── keycloak/
-│   │   ├── client.go            # Client interface + ROPC HTTP implementation
-│   │   ├── client_test.go
-│   │   ├── roles.go             # JWT payload decode + role check
-│   │   └── roles_test.go
-│   └── observability/
-│       ├── logger.go            # JSON slog with static Loki labels
-│       ├── metrics.go           # OTel metric instruments + Recorder interface
-│       └── otel.go              # MeterProvider setup, OTLP exporter, periodic push
-├── features/
-│   ├── auth_test.go             # End-to-end tests against a mock Keycloak HTTP server
-│   └── mock_keycloak_test.go    # httptest-based Keycloak mock
-├── go.mod
-└── go.sum
-```
 
 ---
 
@@ -319,29 +281,3 @@ Contributions are welcome. Please:
 4. Open a pull request with a clear description of what changed and why.
 
 For larger changes, open an issue first to discuss the approach.
-
----
-
-## License
-
-MIT License
-
-Copyright (c) 2026 Valentin Sickert
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
