@@ -1,0 +1,5 @@
+.git
+.claude
+*.md
+features/
+**/*_test.go
