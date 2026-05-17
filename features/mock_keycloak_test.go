@@ -50,15 +50,19 @@ func (mk *mockKeycloak) handler(w http.ResponseWriter, r *http.Request) {
 
 	if user != mk.cfg.validUser || pass != mk.cfg.validPass {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{
+		if err := json.NewEncoder(w).Encode(map[string]string{
 			"error":             "invalid_grant",
 			"error_description": "Invalid user credentials",
-		})
+		}); err != nil {
+			http.Error(w, "encode response", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	token := buildJWT(mk.cfg.clientID, mk.cfg.roles)
-	json.NewEncoder(w).Encode(map[string]string{"access_token": token})
+	if err := json.NewEncoder(w).Encode(map[string]string{"access_token": token}); err != nil {
+		http.Error(w, "encode response", http.StatusInternalServerError)
+	}
 }
 
 func buildJWT(clientID string, roles []string) string {
