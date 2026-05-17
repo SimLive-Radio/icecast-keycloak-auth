@@ -39,8 +39,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.LogLevel != "info" {
 		t.Errorf("LogLevel = %q, want info", cfg.LogLevel)
 	}
-	if cfg.OTLPEndpoint != "http://localhost:4317" {
-		t.Errorf("OTLPEndpoint = %q, want http://localhost:4317", cfg.OTLPEndpoint)
+	if cfg.OTLPEndpoint != "" {
+		t.Errorf("OTLPEndpoint = %q, want empty", cfg.OTLPEndpoint)
 	}
 	if cfg.OTLPProtocol != "grpc" {
 		t.Errorf("OTLPProtocol = %q, want grpc", cfg.OTLPProtocol)
@@ -174,6 +174,7 @@ func TestLoad_InvalidLogLevel(t *testing.T) {
 func TestLoad_InvalidOTLPProtocol(t *testing.T) {
 	requiredVars(t)
 	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 	_, err := config.Load()
 	if err == nil {
