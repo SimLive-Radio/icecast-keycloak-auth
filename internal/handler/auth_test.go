@@ -69,6 +69,9 @@ func TestAuthHandler_ListenerAdd_Returns200(t *testing.T) {
 	if rr.Header().Get("icecast-auth-user") != "1" {
 		t.Error("missing icecast-auth-user: 1 header")
 	}
+	if rr.Header().Get("Icecast-Auth-Message") != "" {
+		t.Error("unexpected Icecast-Auth-Message header on passthrough action")
+	}
 }
 
 func TestAuthHandler_ListenerRemove_Returns200(t *testing.T) {
@@ -103,6 +106,9 @@ func TestAuthHandler_StreamAuth_EmptyUser_Returns401(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Missing username or password" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing username or password")
+	}
 }
 
 func TestAuthHandler_StreamAuth_EmptyPass_Returns401(t *testing.T) {
@@ -110,6 +116,9 @@ func TestAuthHandler_StreamAuth_EmptyPass_Returns401(t *testing.T) {
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": ""})
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
+	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Missing username or password" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing username or password")
 	}
 }
 
@@ -119,6 +128,9 @@ func TestAuthHandler_StreamAuth_KeycloakError_Returns401(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Invalid credentials" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Invalid credentials")
+	}
 }
 
 func TestAuthHandler_StreamAuth_RoleMissing_Returns403(t *testing.T) {
@@ -127,6 +139,9 @@ func TestAuthHandler_StreamAuth_RoleMissing_Returns403(t *testing.T) {
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "secret"})
 	if rr.Code != http.StatusForbidden {
 		t.Errorf("code = %d, want 403", rr.Code)
+	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Missing required role" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing required role")
 	}
 }
 
@@ -139,6 +154,9 @@ func TestAuthHandler_StreamAuth_Success_Returns200WithHeader(t *testing.T) {
 	}
 	if rr.Header().Get("icecast-auth-user") != "1" {
 		t.Error("missing icecast-auth-user: 1 header on success")
+	}
+	if rr.Header().Get("Icecast-Auth-Message") != "" {
+		t.Error("unexpected Icecast-Auth-Message header on success")
 	}
 }
 

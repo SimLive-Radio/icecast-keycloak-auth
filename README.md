@@ -188,8 +188,8 @@ Called by Icecast on every connection attempt. The body is `application/x-www-fo
 | Code | Header | Meaning |
 |---|---|---|
 | `200` | `icecast-auth-user: 1` | Access granted |
-| `401` | — | Bad credentials or Keycloak unreachable |
-| `403` | — | Valid credentials but required client role is missing |
+| `401` | `Icecast-Auth-Message: <Reason>` | Bad credentials, invalid token claims, missing credentials, or Keycloak unreachable |
+| `403` | `Icecast-Auth-Message: <Reason>` | Valid credentials but required client role is missing |
 | `405` | — | Non-POST request |
 
 Only `stream_auth` triggers a credential check. All other actions (`listener_add`, `listener_remove`, etc.) are always approved — they represent bookkeeping events, not access decisions.
