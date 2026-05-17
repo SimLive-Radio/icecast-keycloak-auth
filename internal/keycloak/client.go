@@ -61,11 +61,7 @@ func (c *HTTPClient) GetToken(ctx context.Context, username, password string) (t
 		return "", fmt.Errorf("keycloak request: %w", err)
 	}
 	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			if err == nil {
-				err = fmt.Errorf("close keycloak response body: %w", closeErr)
-			}
-		}
+		_ = resp.Body.Close()
 	}()
 
 	var tr tokenResponse

@@ -96,7 +96,9 @@ func TestHTTPClient_GetToken_WrongPassword(t *testing.T) {
 func TestHTTPClient_GetToken_Timeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
-		json.NewEncoder(w).Encode(map[string]string{"access_token": "tok"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"access_token": "tok"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -135,7 +137,9 @@ func TestHTTPClient_GetToken_InvalidJSON(t *testing.T) {
 func TestHTTPClient_GetToken_EmptyAccessToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"access_token": ""})
+		if err := json.NewEncoder(w).Encode(map[string]string{"access_token": ""}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -162,7 +166,9 @@ func TestHTTPClient_GetToken_URLContainsRealm(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"access_token": "tok.payload.sig"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"access_token": "tok.payload.sig"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
