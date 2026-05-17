@@ -51,9 +51,9 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,format=short
-            ${{ github.ref_type == 'tag' && 'type=semver,pattern={{version}}' }}
-            ${{ github.ref_type == 'tag' && 'type=semver,pattern={{major}}' }}
-            ${{ github.ref_type == 'tag' && 'type=semver,pattern={{major}}.{{minor}}' }}
+            type=semver,pattern={{version}},enable=${{ github.ref_type == 'tag' }}
+            type=semver,pattern={{major}},enable=${{ github.ref_type == 'tag' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.ref_type == 'tag' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
