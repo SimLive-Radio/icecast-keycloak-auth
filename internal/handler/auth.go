@@ -12,27 +12,35 @@ import (
 
 const actionStreamAuth = "stream_auth"
 
+const (
+	authHeaderModeModern = "modern"
+	authHeaderModeLegacy = "legacy"
+)
+
 type AuthHandler struct {
-	keycloak     keycloak.Client
-	clientID     string
-	requiredRole string
-	metrics      observability.Recorder
-	logger       *slog.Logger
+	keycloak       keycloak.Client
+	clientID       string
+	requiredRole   string
+	authHeaderMode string
+	metrics        observability.Recorder
+	logger         *slog.Logger
 }
 
 func NewAuthHandler(
 	kc keycloak.Client,
 	clientID string,
 	requiredRole string,
+	authHeaderMode string,
 	metrics observability.Recorder,
 	logger *slog.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
-		keycloak:     kc,
-		clientID:     clientID,
-		requiredRole: requiredRole,
-		metrics:      metrics,
-		logger:       logger,
+		keycloak:       kc,
+		clientID:       clientID,
+		requiredRole:   requiredRole,
+		authHeaderMode: authHeaderMode,
+		metrics:        metrics,
+		logger:         logger,
 	}
 }
 
@@ -61,8 +69,7 @@ func (h *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("agent", agent),
 			slog.String("result", "passthrough"),
 		)
-		w.Header().Set("icecast-auth-user", "1")
-		w.WriteHeader(http.StatusOK)
+		h.writeAuthHeaders(w, http.StatusOK, "ok", "")
 		return
 	}
 
@@ -83,12 +90,32 @@ func (h *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Int64("duration_ms", duration.Milliseconds()),
 	)
 
-	if code == http.StatusOK {
-		w.Header().Set("icecast-auth-user", "1")
-	} else if reason != "" {
-		w.Header().Set("Icecast-Auth-Message", reason)
+	h.writeAuthHeaders(w, code, resultHeaderValue(code), reason)
+}
+
+func (h *AuthHandler) writeAuthHeaders(w http.ResponseWriter, code int, result, reason string) {
+	if h.authHeaderMode == authHeaderModeLegacy {
+		if code == http.StatusOK {
+			w.Header().Set("icecast-auth-user", "1")
+		} else if reason != "" {
+			w.Header().Set("Icecast-Auth-Message", reason)
+		}
+		w.WriteHeader(code)
+		return
+	}
+
+	w.Header().Set("x-icecast-auth-result", result)
+	if reason != "" {
+		w.Header().Set("x-icecast-auth-message", reason)
 	}
 	w.WriteHeader(code)
+}
+
+func resultHeaderValue(code int) string {
+	if code == http.StatusOK {
+		return "ok"
+	}
+	return "failed"
 }
 
 func (h *AuthHandler) authenticate(ctx context.Context, user, pass string) (string, int, string) {

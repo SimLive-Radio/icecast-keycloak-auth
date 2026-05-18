@@ -42,8 +42,8 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func newHandler(kc *mockKeycloakClient) *handler.AuthHandler {
-	return handler.NewAuthHandler(kc, "myclient", "streamer", observability.NoopRecorder{}, discardLogger())
+func newHandler(kc *mockKeycloakClient, mode string) *handler.AuthHandler {
+	return handler.NewAuthHandler(kc, "myclient", "streamer", mode, observability.NoopRecorder{}, discardLogger())
 }
 
 func postForm(h http.Handler, fields map[string]string) *httptest.ResponseRecorder {
@@ -61,21 +61,21 @@ func postForm(h http.Handler, fields map[string]string) *httptest.ResponseRecord
 // ─── Non-stream_auth actions ──────────────────────────────────────────────────
 
 func TestAuthHandler_ListenerAdd_Returns200(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{})
+	h := newHandler(&mockKeycloakClient{}, "modern")
 	rr := postForm(h, map[string]string{"action": "listener_add", "user": "alice"})
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
 	}
-	if rr.Header().Get("icecast-auth-user") != "1" {
-		t.Error("missing icecast-auth-user: 1 header")
+	if rr.Header().Get("x-icecast-auth-result") != "ok" {
+		t.Error("missing x-icecast-auth-result: ok header")
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "" {
-		t.Error("unexpected Icecast-Auth-Message header on passthrough action")
+	if rr.Header().Get("x-icecast-auth-message") != "" {
+		t.Error("unexpected x-icecast-auth-message header on passthrough action")
 	}
 }
 
 func TestAuthHandler_ListenerRemove_Returns200(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{})
+	h := newHandler(&mockKeycloakClient{}, "modern")
 	rr := postForm(h, map[string]string{"action": "listener_remove", "user": "alice"})
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
@@ -83,7 +83,7 @@ func TestAuthHandler_ListenerRemove_Returns200(t *testing.T) {
 }
 
 func TestAuthHandler_UnknownAction_Returns200(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{})
+	h := newHandler(&mockKeycloakClient{}, "modern")
 	rr := postForm(h, map[string]string{"action": "mount_add"})
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
@@ -91,7 +91,7 @@ func TestAuthHandler_UnknownAction_Returns200(t *testing.T) {
 }
 
 func TestAuthHandler_EmptyAction_Returns200(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{})
+	h := newHandler(&mockKeycloakClient{}, "modern")
 	rr := postForm(h, map[string]string{"action": ""})
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
@@ -101,53 +101,80 @@ func TestAuthHandler_EmptyAction_Returns200(t *testing.T) {
 // ─── stream_auth – credential checks ─────────────────────────────────────────
 
 func TestAuthHandler_StreamAuth_EmptyUser_Returns401(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{token: makeJWT("myclient", []string{"streamer"})})
+	h := newHandler(&mockKeycloakClient{token: makeJWT("myclient", []string{"streamer"})}, "modern")
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "", "pass": "secret"})
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Missing username or password" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing username or password")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Missing username or password" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Missing username or password")
 	}
 }
 
 func TestAuthHandler_StreamAuth_EmptyPass_Returns401(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{token: makeJWT("myclient", []string{"streamer"})})
+	h := newHandler(&mockKeycloakClient{token: makeJWT("myclient", []string{"streamer"})}, "modern")
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": ""})
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Missing username or password" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing username or password")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Missing username or password" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Missing username or password")
 	}
 }
 
 func TestAuthHandler_StreamAuth_KeycloakError_Returns401(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{err: errors.New("invalid credentials")})
+	h := newHandler(&mockKeycloakClient{err: errors.New("invalid credentials")}, "modern")
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "wrong"})
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Invalid credentials" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Invalid credentials")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Invalid credentials" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Invalid credentials")
 	}
 }
 
 func TestAuthHandler_StreamAuth_RoleMissing_Returns403(t *testing.T) {
 	token := makeJWT("myclient", []string{"listener"}) // no "streamer"
-	h := newHandler(&mockKeycloakClient{token: token})
+	h := newHandler(&mockKeycloakClient{token: token}, "modern")
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "secret"})
 	if rr.Code != http.StatusForbidden {
 		t.Errorf("code = %d, want 403", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Missing required role" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing required role")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Missing required role" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Missing required role")
 	}
 }
 
-func TestAuthHandler_StreamAuth_Success_Returns200WithHeader(t *testing.T) {
+func TestAuthHandler_StreamAuth_Success_ModernMode_Returns200WithModernHeader(t *testing.T) {
 	token := makeJWT("myclient", []string{"streamer"})
-	h := newHandler(&mockKeycloakClient{token: token})
+	h := newHandler(&mockKeycloakClient{token: token}, "modern")
+	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "secret"})
+	if rr.Code != http.StatusOK {
+		t.Errorf("code = %d, want 200", rr.Code)
+	}
+	if rr.Header().Get("x-icecast-auth-result") != "ok" {
+		t.Error("missing x-icecast-auth-result: ok header on success")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "" {
+		t.Error("unexpected x-icecast-auth-message header on success")
+	}
+}
+
+func TestAuthHandler_StreamAuth_Success_LegacyMode_Returns200WithLegacyHeader(t *testing.T) {
+	token := makeJWT("myclient", []string{"streamer"})
+	h := newHandler(&mockKeycloakClient{token: token}, "legacy")
 	rr := postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "secret"})
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
@@ -158,12 +185,15 @@ func TestAuthHandler_StreamAuth_Success_Returns200WithHeader(t *testing.T) {
 	if rr.Header().Get("Icecast-Auth-Message") != "" {
 		t.Error("unexpected Icecast-Auth-Message header on success")
 	}
+	if rr.Header().Get("x-icecast-auth-result") != "" {
+		t.Error("unexpected x-icecast-auth-result header in legacy mode")
+	}
 }
 
 // ─── HTTP method enforcement ──────────────────────────────────────────────────
 
 func TestAuthHandler_GetMethod_Returns405(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{})
+	h := newHandler(&mockKeycloakClient{}, "modern")
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -173,7 +203,7 @@ func TestAuthHandler_GetMethod_Returns405(t *testing.T) {
 }
 
 func TestAuthHandler_PutMethod_Returns405(t *testing.T) {
-	h := newHandler(&mockKeycloakClient{})
+	h := newHandler(&mockKeycloakClient{}, "modern")
 	req := httptest.NewRequest(http.MethodPut, "/auth", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -190,7 +220,7 @@ func TestAuthHandler_PasswordNotInLogOutput(t *testing.T) {
 	token := makeJWT("myclient", []string{"streamer"})
 	h := handler.NewAuthHandler(
 		&mockKeycloakClient{token: token},
-		"myclient", "streamer",
+		"myclient", "streamer", "modern",
 		observability.NoopRecorder{},
 		logger,
 	)
@@ -235,7 +265,7 @@ func TestAuthHandler_Metrics_SuccessPath(t *testing.T) {
 	token := makeJWT("myclient", []string{"streamer"})
 	h := handler.NewAuthHandler(
 		&mockKeycloakClient{token: token},
-		"myclient", "streamer", rec, discardLogger(),
+		"myclient", "streamer", "modern", rec, discardLogger(),
 	)
 	postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "secret"})
 
@@ -251,7 +281,7 @@ func TestAuthHandler_Metrics_KeycloakError(t *testing.T) {
 	rec := &capturingRecorder{}
 	h := handler.NewAuthHandler(
 		&mockKeycloakClient{err: errors.New("bad creds")},
-		"myclient", "streamer", rec, discardLogger(),
+		"myclient", "streamer", "modern", rec, discardLogger(),
 	)
 	postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "bad"})
 
@@ -265,7 +295,7 @@ func TestAuthHandler_Metrics_RoleDenied(t *testing.T) {
 	token := makeJWT("myclient", []string{"listener"})
 	h := handler.NewAuthHandler(
 		&mockKeycloakClient{token: token},
-		"myclient", "streamer", rec, discardLogger(),
+		"myclient", "streamer", "modern", rec, discardLogger(),
 	)
 	postForm(h, map[string]string{"action": "stream_auth", "user": "alice", "pass": "secret"})
 
