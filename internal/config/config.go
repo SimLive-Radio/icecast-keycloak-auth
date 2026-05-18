@@ -14,6 +14,7 @@ type Config struct {
 	KeycloakClientID       string
 	KeycloakClientSecret   string
 	RequiredClientRole     string
+	IcecastAuthHeaderMode  string
 	LogLevel               string
 	OTLPEndpoint           string
 	OTLPProtocol           string
@@ -63,6 +64,13 @@ func Load() (*Config, error) {
 		errs = append(errs, fmt.Sprintf("LOG_LEVEL must be one of debug/info/warn/error, got %q", logLevel))
 	}
 
+	authHeaderMode := strings.ToLower(strings.TrimSpace(optional("ICECAST_AUTH_HEADER_MODE", "modern")))
+	switch authHeaderMode {
+	case "modern", "legacy":
+	default:
+		errs = append(errs, fmt.Sprintf("ICECAST_AUTH_HEADER_MODE must be one of modern/legacy, got %q", authHeaderMode))
+	}
+
 	cfg := &Config{
 		ListenAddr:             optional("LISTEN_ADDR", ":8080"),
 		KeycloakBaseURL:        require("KEYCLOAK_BASE_URL"),
@@ -70,6 +78,7 @@ func Load() (*Config, error) {
 		KeycloakClientID:       require("KEYCLOAK_CLIENT_ID"),
 		KeycloakClientSecret:   optional("KEYCLOAK_CLIENT_SECRET", ""),
 		RequiredClientRole:     require("REQUIRED_CLIENT_ROLE"),
+		IcecastAuthHeaderMode:  authHeaderMode,
 		LogLevel:               logLevel,
 		OTLPEndpoint:           optional("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTLPProtocol:           otlpProtocol,

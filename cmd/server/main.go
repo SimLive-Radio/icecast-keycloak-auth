@@ -67,6 +67,7 @@ func run() error {
 		kc,
 		cfg.KeycloakClientID,
 		cfg.RequiredClientRole,
+		cfg.IcecastAuthHeaderMode,
 		metrics,
 		logger,
 	)
