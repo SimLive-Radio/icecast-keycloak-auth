@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,10 +17,69 @@ import (
 )
 
 func main() {
+	// Support a lightweight in-container health check by invoking the
+	// service binary with `--health`. This allows healthchecks to run in a
+	// scratch-based image without adding curl/wget.
+	if len(os.Args) > 1 && os.Args[1] == "--health" {
+		if err := doHealthCheck(); err != nil {
+			fmt.Fprintf(os.Stderr, "healthcheck failed: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// doHealthCheck performs a simple GET against the running server's /health
+// endpoint using the configured listen address. It loads the normal
+// configuration so environment problems are surfaced as failures.
+func doHealthCheck() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	hostPort, err := localHealthCheckHostPort(cfg.ListenAddr)
+	if err != nil {
+		return err
+	}
+	url := "http://" + hostPort + "/health"
+
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func localHealthCheckHostPort(listenAddr string) (string, error) {
+	host, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return "", fmt.Errorf("invalid listen addr %q: %w", listenAddr, err)
+	}
+
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+		if ip.To4() != nil {
+			host = "127.0.0.1"
+		} else {
+			host = "::1"
+		}
+	}
+
+	return net.JoinHostPort(host, port), nil
 }
 
 func run() error {
