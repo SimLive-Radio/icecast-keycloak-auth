@@ -4,6 +4,8 @@ A lightweight authentication proxy that lets [Icecast](https://icecast.org/) del
 
 Icecast only knows one source password — everyone who knows it can stream. This service sits in between: Icecast calls out on every connection attempt, this service validates the credentials against Keycloak using the [Resource Owner Password Credentials (ROPC)](https://www.rfc-editor.org/rfc/rfc6749#section-4.3) flow and checks that the user holds the required client role. No role, no stream.
 
+Icecast v2.5 introduced a new header-based auth result format. This service defaults to the modern v2.5 headers and can be switched back to the legacy Icecast response headers with an environment variable for older deployments.
+
 Users and roles live entirely in Keycloak. This service stores nothing.
 
 [![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
@@ -117,6 +119,7 @@ All configuration is done via environment variables. The service refuses to star
 | `KEYCLOAK_REALM` | **Yes** | — | Realm name |
 | `KEYCLOAK_CLIENT_ID` | **Yes** | — | Client configured with ROPC (Direct Access Grants enabled) |
 | `REQUIRED_CLIENT_ROLE` | **Yes** | — | Client role a user must hold to be allowed to stream |
+| `ICECAST_AUTH_HEADER_MODE` | No | `modern` | `modern` uses `x-icecast-auth-result` / `x-icecast-auth-message`; `legacy` uses `icecast-auth-user` / `Icecast-Auth-Message` |
 | `LISTEN_ADDR` | No | `:8080` | Address and port the HTTP server binds to |
 | `KEYCLOAK_CLIENT_SECRET` | No | — | Leave empty for public clients |
 | `LOG_LEVEL` | No | `info` | One of `debug`, `info`, `warn`, `error` |
@@ -187,10 +190,12 @@ Called by Icecast on every connection attempt. The body is `application/x-www-fo
 
 | Code | Header | Meaning |
 |---|---|---|
-| `200` | `icecast-auth-user: 1` | Access granted |
-| `401` | `Icecast-Auth-Message: <Reason>` | Bad credentials, invalid token claims, missing credentials, or Keycloak unreachable |
-| `403` | `Icecast-Auth-Message: <Reason>` | Valid credentials but required client role is missing |
+| `200` | `x-icecast-auth-result: ok` | Access granted |
+| `401` | `x-icecast-auth-result: failed`, `x-icecast-auth-message: <Reason>` | Bad credentials, invalid token claims, missing credentials, or Keycloak unreachable |
+| `403` | `x-icecast-auth-result: failed`, `x-icecast-auth-message: <Reason>` | Valid credentials but required client role is missing |
 | `405` | — | Non-POST request |
+
+Set `ICECAST_AUTH_HEADER_MODE=legacy` if you need the older response format. In that mode, successful auth returns `icecast-auth-user: 1` and failures return `Icecast-Auth-Message: <Reason>`.
 
 Only `stream_auth` triggers a credential check. All other actions (`listener_add`, `listener_remove`, etc.) are always approved — they represent bookkeeping events, not access decisions.
 
