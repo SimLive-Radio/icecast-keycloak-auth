@@ -57,6 +57,9 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.LokiEnvLabel != "production" {
 		t.Errorf("LokiEnvLabel = %q, want production", cfg.LokiEnvLabel)
 	}
+	if cfg.IcecastAuthHeaderMode != "modern" {
+		t.Errorf("IcecastAuthHeaderMode = %q, want modern", cfg.IcecastAuthHeaderMode)
+	}
 }
 
 func TestLoad_RequiredVarsPresent(t *testing.T) {
@@ -247,5 +250,18 @@ func TestLoad_HTTPProtobufProtocol(t *testing.T) {
 	}
 	if cfg.OTLPProtocol != "http/protobuf" {
 		t.Errorf("OTLPProtocol = %q, want http/protobuf", cfg.OTLPProtocol)
+	}
+}
+
+func TestLoad_LegacyIcecastAuthHeaderMode(t *testing.T) {
+	requiredVars(t)
+	t.Setenv("ICECAST_AUTH_HEADER_MODE", "legacy")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.IcecastAuthHeaderMode != "legacy" {
+		t.Errorf("IcecastAuthHeaderMode = %q, want legacy", cfg.IcecastAuthHeaderMode)
 	}
 }

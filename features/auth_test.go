@@ -15,18 +15,18 @@ import (
 )
 
 const (
-	testClientID    = "icecast-client"
-	testRealm       = "testrealm"
-	testRole        = "streamer"
-	testValidUser   = "alice"
-	testValidPass   = "correcthorsebatterystaple"
+	testClientID  = "icecast-client"
+	testRealm     = "testrealm"
+	testRole      = "streamer"
+	testValidUser = "alice"
+	testValidPass = "correcthorsebatterystaple"
 )
 
 func buildHandler(t *testing.T, kcBaseURL string) http.Handler {
 	t.Helper()
 	kc := keycloak.NewHTTPClient(kcBaseURL, testRealm, testClientID, "")
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	authH := handler.NewAuthHandler(kc, testClientID, testRole, observability.NoopRecorder{}, logger)
+	authH := handler.NewAuthHandler(kc, testClientID, testRole, "modern", observability.NoopRecorder{}, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("/auth", authH)
@@ -68,8 +68,8 @@ func TestFeature_StreamAuth_ValidCredentials_CorrectRole_Returns200(t *testing.T
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
 	}
-	if rr.Header().Get("icecast-auth-user") != "1" {
-		t.Error("missing icecast-auth-user: 1 header")
+	if rr.Header().Get("x-icecast-auth-result") != "ok" {
+		t.Error("missing x-icecast-auth-result: ok header")
 	}
 }
 
@@ -92,8 +92,11 @@ func TestFeature_StreamAuth_ValidCredentials_MissingRole_Returns403(t *testing.T
 	if rr.Code != http.StatusForbidden {
 		t.Errorf("code = %d, want 403", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Missing required role" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing required role")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Missing required role" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Missing required role")
 	}
 }
 
@@ -116,8 +119,11 @@ func TestFeature_StreamAuth_WrongPassword_Returns401(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Invalid credentials" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Invalid credentials")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Invalid credentials" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Invalid credentials")
 	}
 }
 
@@ -135,8 +141,8 @@ func TestFeature_ListenerAdd_Returns200(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("code = %d, want 200", rr.Code)
 	}
-	if rr.Header().Get("icecast-auth-user") != "1" {
-		t.Error("missing icecast-auth-user: 1 header")
+	if rr.Header().Get("x-icecast-auth-result") != "ok" {
+		t.Error("missing x-icecast-auth-result: ok header")
 	}
 }
 
@@ -188,8 +194,11 @@ func TestFeature_KeycloakUnreachable_Returns401_ServiceContinues(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401 when Keycloak is unreachable", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Invalid credentials" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Invalid credentials")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Invalid credentials" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Invalid credentials")
 	}
 
 	// Verify the service continues to handle requests (non-stream_auth still works).
@@ -248,7 +257,40 @@ func TestFeature_StreamAuth_EmptyCredentials_Returns401(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
 	}
-	if rr.Header().Get("Icecast-Auth-Message") != "Missing username or password" {
-		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing username or password")
+	if rr.Header().Get("x-icecast-auth-result") != "failed" {
+		t.Errorf("x-icecast-auth-result = %q, want %q", rr.Header().Get("x-icecast-auth-result"), "failed")
+	}
+	if rr.Header().Get("x-icecast-auth-message") != "Missing username or password" {
+		t.Errorf("x-icecast-auth-message = %q, want %q", rr.Header().Get("x-icecast-auth-message"), "Missing username or password")
+	}
+}
+
+func TestFeature_StreamAuth_LegacyMode_ReturnsLegacyHeader(t *testing.T) {
+	mk := newMockKeycloak(t, mockKeycloakConfig{
+		validUser: testValidUser,
+		validPass: testValidPass,
+		clientID:  testClientID,
+		roles:     []string{testRole},
+	})
+	kc := keycloak.NewHTTPClient(mk.URL(), testRealm, testClientID, "")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	authH := handler.NewAuthHandler(kc, testClientID, testRole, "legacy", observability.NoopRecorder{}, logger)
+	mux := http.NewServeMux()
+	mux.Handle("/auth", authH)
+
+	rr := doPost(t, mux, map[string]string{
+		"action": "stream_auth",
+		"user":   testValidUser,
+		"pass":   testValidPass,
+	})
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("code = %d, want 200", rr.Code)
+	}
+	if rr.Header().Get("icecast-auth-user") != "1" {
+		t.Error("missing icecast-auth-user: 1 header")
+	}
+	if rr.Header().Get("x-icecast-auth-result") != "" {
+		t.Error("unexpected x-icecast-auth-result header in legacy mode")
 	}
 }
