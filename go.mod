@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	go.opentelemetry.io/otel v1.43.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.28.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0
 	go.opentelemetry.io/otel/metric v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0
@@ -12,7 +12,6 @@ require (
 )
 
 require (
-	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
