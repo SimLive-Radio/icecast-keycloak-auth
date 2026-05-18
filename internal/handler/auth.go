@@ -69,7 +69,7 @@ func (h *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pass := r.FormValue("pass")
 
 	start := time.Now()
-	result, code := h.authenticate(r.Context(), user, pass)
+	result, code, reason := h.authenticate(r.Context(), user, pass)
 	duration := time.Since(start)
 
 	h.metrics.RecordAuthRequest(r.Context(), action, result)
@@ -85,13 +85,15 @@ func (h *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if code == http.StatusOK {
 		w.Header().Set("icecast-auth-user", "1")
+	} else if reason != "" {
+		w.Header().Set("Icecast-Auth-Message", reason)
 	}
 	w.WriteHeader(code)
 }
 
-func (h *AuthHandler) authenticate(ctx context.Context, user, pass string) (string, int) {
+func (h *AuthHandler) authenticate(ctx context.Context, user, pass string) (string, int, string) {
 	if user == "" || pass == "" {
-		return "unauthorized", http.StatusUnauthorized
+		return "unauthorized", http.StatusUnauthorized, "Missing username or password"
 	}
 
 	kcStart := time.Now()
@@ -102,7 +104,7 @@ func (h *AuthHandler) authenticate(ctx context.Context, user, pass string) (stri
 		h.metrics.RecordKeycloakRequest(ctx, "error")
 		h.metrics.RecordKeycloakDuration(ctx, kcDuration)
 		h.logger.Warn("keycloak token request failed", slog.String("error", err.Error()))
-		return "unauthorized", http.StatusUnauthorized
+		return "unauthorized", http.StatusUnauthorized, "Invalid credentials"
 	}
 
 	h.metrics.RecordKeycloakRequest(ctx, "success")
@@ -111,15 +113,15 @@ func (h *AuthHandler) authenticate(ctx context.Context, user, pass string) (stri
 	hasRole, err := keycloak.HasClientRole(token, h.clientID, h.requiredRole)
 	if err != nil {
 		h.logger.Error("role check failed", slog.String("error", err.Error()))
-		return "unauthorized", http.StatusUnauthorized
+		return "unauthorized", http.StatusUnauthorized, "Invalid token claims"
 	}
 
 	if !hasRole {
 		h.metrics.RecordRoleDenied(ctx, h.requiredRole)
-		return "forbidden", http.StatusForbidden
+		return "forbidden", http.StatusForbidden, "Missing required role"
 	}
 
-	return "success", http.StatusOK
+	return "success", http.StatusOK, ""
 }
 
 type HealthHandler struct{}

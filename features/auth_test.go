@@ -92,6 +92,9 @@ func TestFeature_StreamAuth_ValidCredentials_MissingRole_Returns403(t *testing.T
 	if rr.Code != http.StatusForbidden {
 		t.Errorf("code = %d, want 403", rr.Code)
 	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Missing required role" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing required role")
+	}
 }
 
 // F-28: stream_auth → Keycloak 401 → 401
@@ -112,6 +115,9 @@ func TestFeature_StreamAuth_WrongPassword_Returns401(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
+	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Invalid credentials" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Invalid credentials")
 	}
 }
 
@@ -182,6 +188,9 @@ func TestFeature_KeycloakUnreachable_Returns401_ServiceContinues(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401 when Keycloak is unreachable", rr.Code)
 	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Invalid credentials" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Invalid credentials")
+	}
 
 	// Verify the service continues to handle requests (non-stream_auth still works).
 	rr2 := doPost(t, h, map[string]string{
@@ -238,5 +247,8 @@ func TestFeature_StreamAuth_EmptyCredentials_Returns401(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("code = %d, want 401", rr.Code)
+	}
+	if rr.Header().Get("Icecast-Auth-Message") != "Missing username or password" {
+		t.Errorf("Icecast-Auth-Message = %q, want %q", rr.Header().Get("Icecast-Auth-Message"), "Missing username or password")
 	}
 }
