@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -43,23 +43,43 @@ func doHealthCheck() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	host := cfg.ListenAddr
-	if strings.HasPrefix(host, ":") {
-		host = "127.0.0.1" + host
+	hostPort, err := localHealthCheckHostPort(cfg.ListenAddr)
+	if err != nil {
+		return err
 	}
-	url := "http://" + host + "/health"
+	url := "http://" + hostPort + "/health"
 
 	client := http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func localHealthCheckHostPort(listenAddr string) (string, error) {
+	host, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return "", fmt.Errorf("invalid listen addr %q: %w", listenAddr, err)
+	}
+
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+		if ip.To4() != nil {
+			host = "127.0.0.1"
+		} else {
+			host = "::1"
+		}
+	}
+
+	return net.JoinHostPort(host, port), nil
 }
 
 func run() error {
