@@ -1,5 +1,5 @@
 # ── Build ─────────────────────────────────────────────────────────────────────
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 # ca-certificates are copied into the final stage so the service can reach
 # Keycloak over HTTPS.
